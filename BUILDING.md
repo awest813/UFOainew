@@ -89,3 +89,20 @@ make -j$(nproc)
 ```
 
 Then verify binaries were produced for the modules you enabled.
+
+## 6) Test-build preflight
+
+Use the helper script to quickly check whether this environment can build the automated test target (`testall`) and the main client (`ufo`):
+
+```bash
+./tools/test-build-preflight.sh --reconfigure
+```
+
+The script reports which targets are enabled and lists missing dependencies mapped to the exact modules that block `testall`/`ufo`.
+
+When `testall` is enabled, run:
+
+```bash
+make -j$(nproc) testall
+```
+
