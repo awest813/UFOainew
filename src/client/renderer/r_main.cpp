@@ -42,6 +42,21 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../../ports/system.h"
 #include "../client.h"
 
+#include <cctype>
+#include <string>
+
+#ifndef GL_NUM_EXTENSIONS
+#define GL_NUM_EXTENSIONS 0x821D
+#endif
+
+#ifndef GL_MAJOR_VERSION
+#define GL_MAJOR_VERSION 0x821B
+#endif
+
+#ifndef GL_MINOR_VERSION
+#define GL_MINOR_VERSION 0x821C
+#endif
+
 rendererData_t refdef;
 
 rconfig_t r_config;
@@ -55,6 +70,7 @@ image_t* r_dummyTexture; /* 1x1 pixel white texture to be used when texturing is
 Weather r_battlescapeWeather;
 
 static cvar_t* r_maxtexres;
+static char* r_extensionsStringStorage;
 
 cvar_t* r_weather;
 cvar_t* r_drawentities;
@@ -111,6 +127,9 @@ cvar_t* r_drawtags;
 
 static void R_PrintInfo (const char* pre, const char* msg)
 {
+	if (msg == nullptr)
+		msg = "<not available>";
+
 	char buf[4096];
 	const size_t length = sizeof(buf);
 	const size_t maxLength = strlen(msg);
@@ -121,6 +140,50 @@ static void R_PrintInfo (const char* pre, const char* msg)
 		Com_Printf("%s", buf);
 	}
 	Com_Printf("\n");
+}
+
+static void R_RefreshExtensionsString (void)
+{
+	const char* extString = (const char*)glGetString(GL_EXTENSIONS);
+	if (extString != nullptr) {
+		r_config.extensionsString = extString;
+		return;
+	}
+
+	typedef const GLubyte* (APIENTRY* GetStringi_t)(GLenum name, GLuint index);
+	const GetStringi_t glGetStringiProc = (GetStringi_t)SDL_GL_GetProcAddress("glGetStringi");
+	if (glGetStringiProc == nullptr) {
+		r_config.extensionsString = "";
+		Com_Printf("GL_EXTENSIONS string unavailable and glGetStringi not found.\n");
+		return;
+	}
+
+	GLint extensionCount = 0;
+	glGetIntegerv(GL_NUM_EXTENSIONS, &extensionCount);
+	if (extensionCount <= 0) {
+		r_config.extensionsString = "";
+		Com_Printf("GL_NUM_EXTENSIONS returned %d\n", extensionCount);
+		return;
+	}
+
+	std::string extensionList;
+	for (GLint i = 0; i < extensionCount; i++) {
+		const char* extension = (const char*)glGetStringiProc(GL_EXTENSIONS, i);
+		if (extension == nullptr || *extension == '\0')
+			continue;
+
+		if (!extensionList.empty())
+			extensionList += ' ';
+		extensionList += extension;
+	}
+
+	if (r_extensionsStringStorage != nullptr) {
+		Mem_Free(r_extensionsStringStorage);
+		r_extensionsStringStorage = nullptr;
+	}
+	r_extensionsStringStorage = Mem_StrDup(extensionList.c_str());
+	r_config.extensionsString = r_extensionsStringStorage;
+	Com_Printf("Using glGetStringi fallback for extension discovery (%d extensions).\n", extensionCount);
 }
 
 /**
@@ -772,6 +835,68 @@ static uintptr_t R_GetProcAddressExt (const char* functionName)
 	return 0;
 }
 
+static inline bool R_HasExtensionName (const char* extensionList, const char* extension)
+{
+	if (extensionList == nullptr || extension == nullptr || *extension == '\0')
+		return false;
+
+	const size_t extensionLength = strlen(extension);
+	const char* cursor = extensionList;
+	while ((cursor = strstr(cursor, extension)) != nullptr) {
+		const bool startsAtBoundary = cursor == extensionList || isspace((unsigned char)*(cursor - 1));
+		const bool endsAtBoundary = cursor[extensionLength] == '\0' || isspace((unsigned char)cursor[extensionLength]);
+		if (startsAtBoundary && endsAtBoundary)
+			return true;
+
+		cursor += extensionLength;
+	}
+
+	return false;
+}
+
+static bool R_ParseGLVersionString (const char* versionString, int* major, int* minor)
+{
+	if (versionString == nullptr)
+		return false;
+
+	if (sscanf(versionString, "%d.%d", major, minor) == 2)
+		return true;
+
+	const char* versionNumbers = versionString;
+	while (*versionNumbers && strchr("0123456789", *versionNumbers) == nullptr)
+		versionNumbers++;
+
+	return *versionNumbers && sscanf(versionNumbers, "%d.%d", major, minor) == 2;
+}
+
+static void R_DetectGLVersion (void)
+{
+	r_config.glVersionMajor = 0;
+	r_config.glVersionMinor = 0;
+
+	int parsedMajor = 0;
+	int parsedMinor = 0;
+	if (R_ParseGLVersionString(r_config.versionString, &parsedMajor, &parsedMinor)) {
+		r_config.glVersionMajor = parsedMajor;
+		r_config.glVersionMinor = parsedMinor;
+	}
+
+#ifndef GL_VERSION_ES_CM_1_0
+	if (r_config.glVersionMajor >= 3) {
+		GLint major = 0;
+		GLint minor = 0;
+		glGetIntegerv(GL_MAJOR_VERSION, &major);
+		if (glGetError() == GL_NO_ERROR && major > 0) {
+			glGetIntegerv(GL_MINOR_VERSION, &minor);
+			if (glGetError() == GL_NO_ERROR && minor >= 0) {
+				r_config.glVersionMajor = major;
+				r_config.glVersionMinor = minor;
+			}
+		}
+	}
+#endif
+}
+
 /**
  * @brief Checks for an OpenGL extension that was announced via the OpenGL ext string. If the given extension string
  * includes a placeholder (###), several types are checked. Those from the ARB, those that official extensions (EXT),
@@ -790,7 +915,7 @@ static inline bool R_CheckExtension (const char* extension)
 #endif
 	const char* s = strstr(extension, "###");
 	if (s == nullptr) {
-		found = strstr(r_config.extensionsString, extension) != nullptr;
+		found = R_HasExtensionName(r_config.extensionsString, extension);
 	} else {
 		const char* replace[] = {"ARB", "EXT", "OES"};
 		char targetBuf[128];
@@ -799,7 +924,7 @@ static inline bool R_CheckExtension (const char* extension)
 		size_t i;
 		for (i = 0; i < replaceNo; i++) {
 			if (Q_strreplace(extension, "###", replace[i], targetBuf, length)) {
-				if (strstr(r_config.extensionsString, targetBuf) != nullptr) {
+				if (R_HasExtensionName(r_config.extensionsString, targetBuf)) {
 					found = true;
 					break;
 				}
@@ -836,15 +961,8 @@ static void R_InitExtensions (void)
 	GLenum err;
 	int tmpInteger;
 
-	/* Get OpenGL version.*/
-	if(sscanf(r_config.versionString, "%d.%d", &r_config.glVersionMajor, &r_config.glVersionMinor) != 2) {
-		const char*  versionNumbers = r_config.versionString; /* GLES reports version as "OpenGL ES 1.1", so we must skip non-numeric symbols first */
-		while(*versionNumbers && strchr("0123456789", *versionNumbers) == nullptr) {
-			versionNumbers ++;
-		}
-		if( *versionNumbers )
-			sscanf(versionNumbers, "%d.%d", &r_config.glVersionMajor, &r_config.glVersionMinor);
-	}
+	/* Get OpenGL version. */
+	R_DetectGLVersion();
 	Com_Printf("OpenGL version detected: %d.%d\n", r_config.glVersionMajor, r_config.glVersionMinor);
 
 	/* multitexture */
@@ -919,7 +1037,7 @@ static void R_InitExtensions (void)
 	if (R_CheckExtension("GL_ARB_texture_compression")) {
 		if (r_ext_texture_compression->integer) {
 			Com_Printf("using GL_ARB_texture_compression\n");
-			if (r_ext_s3tc_compression->integer && strstr(r_config.extensionsString, "GL_EXT_texture_compression_s3tc")) {
+			if (r_ext_s3tc_compression->integer && R_HasExtensionName(r_config.extensionsString, "GL_EXT_texture_compression_s3tc")) {
 				r_config.gl_compressed_solid_format = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
 				r_config.gl_compressed_alpha_format = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
 			} else {
@@ -1279,7 +1397,7 @@ bool R_Init (void)
 	r_config.vendorString = (const char*)glGetString(GL_VENDOR);
 	r_config.rendererString = (const char*)glGetString(GL_RENDERER);
 	r_config.versionString = (const char*)glGetString(GL_VERSION);
-	r_config.extensionsString = (const char*)glGetString(GL_EXTENSIONS);
+	R_RefreshExtensionsString();
 	R_Strings_f();
 
 	/* sanity checks and card specific hacks */
@@ -1327,4 +1445,9 @@ void R_Shutdown (void)
 
 	/* shut down OS specific OpenGL stuff like contexts, etc. */
 	Rimp_Shutdown();
+
+	if (r_extensionsStringStorage != nullptr) {
+		Mem_Free(r_extensionsStringStorage);
+		r_extensionsStringStorage = nullptr;
+	}
 }
