@@ -35,3 +35,5 @@ void UI_Reinit(void);
 /* misc */
 void UI_ExecuteConfunc(const char* fmt, ...) __attribute__((format(__printf__, 1, 2)));
 int UI_DebugMode(void);
+float UI_GetScale(void);
+void UI_CursorToUISpace(int rawX, int rawY, int* uiX, int* uiY);

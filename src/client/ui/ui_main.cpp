@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../cl_menu.h"
 #include "node/ui_node_abstractnode.h"
 #include "ui_lua.h"
+#include "../cl_shared.h"
 #include <vector>
 #include <string>
 
@@ -44,6 +45,32 @@ memPool_t* ui_sysPool;
 #ifdef DEBUG
 static cvar_t* ui_debug;
 #endif
+static cvar_t* ui_scale;
+
+static float UI_GetScaleClamped (void)
+{
+	if (ui_scale == nullptr)
+		return 1.0f;
+
+	return Clamp(ui_scale->value, 0.5f, 2.0f);
+}
+
+float UI_GetScale (void)
+{
+	return UI_GetScaleClamped();
+}
+
+void UI_CursorToUISpace (int rawX, int rawY, int* uiX, int* uiY)
+{
+	const float scale = UI_GetScaleClamped();
+	const float offsetX = ((float)viddef.virtualWidth * (1.0f - scale)) * 0.5f;
+	const float offsetY = ((float)viddef.virtualHeight * (1.0f - scale)) * 0.5f;
+
+	if (uiX != nullptr)
+		*uiX = (rawX - offsetX) / scale;
+	if (uiY != nullptr)
+		*uiY = (rawY - offsetY) / scale;
+}
 
 /**
  * @brief Get the current debug mode (0 mean disabled)
@@ -287,6 +314,7 @@ void UI_Init (void)
 	OBJZERO(ui_global);
 
 	ui_sounds = Cvar_Get("ui_sounds", "1", CVAR_ARCHIVE, "Activates UI sounds");
+	ui_scale = Cvar_Get("ui_scale", "1", CVAR_ARCHIVE, "Global user interface scale factor");
 
 #ifdef DEBUG
 	Cmd_AddCommand("debug_uimemory", UI_Memory_f, "Display info about UI memory allocation");

@@ -369,6 +369,37 @@ window options
 				}
 			}
 
+
+			// Global UI scale factor
+			panel ui_scale {
+				{
+					pos		"0 295"
+					size		"512 30"
+					onMouseEnter 	{ *node:this.ui_scale_label@color = "1 1 1 0.9" }
+					onMouseLeave 	{ *node:this.ui_scale_label@color = "1 1 1 0.5" }
+				}
+
+				string ui_scale_label {
+					string		"_UI scale"
+					tooltip		"_Global scale factor for HUD and menu elements"
+					pos			"5 5"
+					size		"220 20"
+					color		"1 1 1 0.5"
+				}
+
+				bar ui_scale_bar {
+					current		*cvar:ui_scale
+					pos			"237 11"
+					size		"251 8"
+					color		"0.582 0.808 0.758 1"
+					border		"1"
+					bordercolor	"0.582 0.808 0.758 1"
+					min			0.5
+					max			2.0
+					onClick		{ }
+				}
+			}
+
 			// ===============
 			// GENERAL OPTIONS
 			// Second Column

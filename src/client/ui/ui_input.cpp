@@ -572,10 +572,13 @@ bool UI_CheckMouseMove (void)
 	if (hoveredNode && (hoveredNode->invis || !UI_CheckVisibility(hoveredNode)))
 		UI_InvalidateMouse();
 
-	if (mousePosX != oldMousePosX || mousePosY != oldMousePosY) {
-		oldMousePosX = mousePosX;
-		oldMousePosY = mousePosY;
-		UI_MouseMove(mousePosX, mousePosY);
+	int uiMousePosX, uiMousePosY;
+	UI_CursorToUISpace(mousePosX, mousePosY, &uiMousePosX, &uiMousePosY);
+
+	if (uiMousePosX != oldMousePosX || uiMousePosY != oldMousePosY) {
+		oldMousePosX = uiMousePosX;
+		oldMousePosY = uiMousePosY;
+		UI_MouseMove(uiMousePosX, uiMousePosY);
 		return true;
 	}
 
@@ -800,6 +803,8 @@ static void UI_LongPressCallback (uiNode_t* , uiTimer_t* timer)
  */
 void UI_MouseDown (int x, int y, int button)
 {
+	UI_CursorToUISpace(x, y, &x, &y);
+
 	/* disable old long click event */
 	if (longPressTimer)
 		UI_TimerStop(longPressTimer);
@@ -838,6 +843,8 @@ void UI_MouseDown (int x, int y, int button)
  */
 void UI_MouseUp (int x, int y, int button)
 {
+	UI_CursorToUISpace(x, y, &x, &y);
+
 	/* disable long click event */
 	if (longPressTimer)
 		UI_TimerStop(longPressTimer);

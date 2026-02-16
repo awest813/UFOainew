@@ -31,22 +31,42 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../renderer/r_misc.h"
 #include "../renderer/r_state.h"
 
+static inline void UI_ApplyScaleToPoint (float x, float y, float& scaledX, float& scaledY)
+{
+	const float scale = UI_GetScale();
+	const float offsetX = ((float)viddef.virtualWidth * (1.0f - scale)) * 0.5f;
+	const float offsetY = ((float)viddef.virtualHeight * (1.0f - scale)) * 0.5f;
+	scaledX = x * scale + offsetX;
+	scaledY = y * scale + offsetY;
+}
+
+static inline int UI_ApplyScaleToLength (int value)
+{
+	return value * UI_GetScale();
+}
+
 /**
  * @brief Fills a box of pixels with a single color
  */
 void UI_DrawFill (int x, int y, int w, int h, const vec4_t color)
 {
-	R_DrawFill(x, y, w, h, color);
+	float sx, sy;
+	UI_ApplyScaleToPoint(x, y, sx, sy);
+	R_DrawFill(sx, sy, UI_ApplyScaleToLength(w), UI_ApplyScaleToLength(h), color);
 }
 
 void UI_DrawRect (int x, int y, int w, int h, const vec4_t color, float lineWidth, int pattern)
 {
-	R_DrawRect(x, y, w, h, color, lineWidth, pattern);
+	float sx, sy;
+	UI_ApplyScaleToPoint(x, y, sx, sy);
+	R_DrawRect(sx, sy, UI_ApplyScaleToLength(w), UI_ApplyScaleToLength(h), color, lineWidth, pattern);
 }
 
 void UI_PushClipRect (int x, int y, int width, int height)
 {
-	R_PushClipRect(x, y, width, height);
+	float sx, sy;
+	UI_ApplyScaleToPoint(x, y, sx, sy);
+	R_PushClipRect(sx, sy, UI_ApplyScaleToLength(width), UI_ApplyScaleToLength(height));
 }
 
 void UI_PopClipRect (void)
@@ -130,29 +150,32 @@ void UI_DrawNormImage (bool flip, float x, float y, float w, float h, float sh, 
 	if (!image)
 		return;
 
+	float scaledX, scaledY;
+	UI_ApplyScaleToPoint(x, y, scaledX, scaledY);
+
 	/* normalize to the screen resolution */
-	x1 = x * viddef.rx;
-	y1 = y * viddef.ry;
+	x1 = scaledX * viddef.rx;
+	y1 = scaledY * viddef.ry;
 
 	/* provided width and height (if any) take precedence */
 	if (w)
-		nw = w * viddef.rx;
+		nw = (w * UI_GetScale()) * viddef.rx;
 	else
 		nw = 0;
 
 	if (h)
-		nh = h * viddef.ry;
+		nh = (h * UI_GetScale()) * viddef.ry;
 	else
 		nh = 0;
 
 	/* horizontal texture mapping */
 	if (sh) {
 		if (!w)
-			nw = (sh - sl) * viddef.rx;
+			nw = ((sh - sl) * UI_GetScale()) * viddef.rx;
 		sh /= image->width;
 	} else {
 		if (!w)
-			nw = ((float)image->width - sl) * viddef.rx;
+			nw = (((float)image->width - sl) * UI_GetScale()) * viddef.rx;
 		sh = 1.0f;
 	}
 	sl /= image->width;
@@ -160,11 +183,11 @@ void UI_DrawNormImage (bool flip, float x, float y, float w, float h, float sh, 
 	/* vertical texture mapping */
 	if (th) {
 		if (!h)
-			nh = (th - tl) * viddef.ry;
+			nh = ((th - tl) * UI_GetScale()) * viddef.ry;
 		th /= image->height;
 	} else {
 		if (!h)
-			nh = ((float)image->height - tl) * viddef.ry;
+			nh = (((float)image->height - tl) * UI_GetScale()) * viddef.ry;
 		th = 1.0f;
 	}
 	tl /= image->height;
@@ -389,8 +412,17 @@ int UI_DrawString (const char* fontID, align_t align, int x, int y, int absX, in
 	else if (verticalAlign == 2)
 		y += -lineHeight;
 
-	lines = R_FontDrawString(fontID, align, x, y, absX, maxWidth, lineHeight,
-			c, boxHeight, scrollPos, curLine, method);
+	const float scale = UI_GetScale();
+	const int scaledX = x * scale + ((float)viddef.virtualWidth * (1.0f - scale)) * 0.5f;
+	const int scaledY = y * scale + ((float)viddef.virtualHeight * (1.0f - scale)) * 0.5f;
+	const int scaledAbsX = absX * scale + ((float)viddef.virtualWidth * (1.0f - scale)) * 0.5f;
+	const int scaledMaxWidth = maxWidth * scale;
+	const int scaledLineHeight = lineHeight * scale;
+	const int scaledBoxHeight = boxHeight * scale;
+	const int scaledScrollPos = scrollPos * scale;
+
+	lines = R_FontDrawString(fontID, align, scaledX, scaledY, scaledAbsX, scaledMaxWidth, scaledLineHeight,
+			c, scaledBoxHeight, scaledScrollPos, curLine, method);
 
 	if (curLine && increaseLine)
 		*curLine += lines;

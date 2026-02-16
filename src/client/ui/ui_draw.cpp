@@ -385,7 +385,9 @@ void UI_Draw (void)
 
 	/* draw tooltip */
 	if (hoveredNode && tooltipVisible && !UI_DNDIsDragging()) {
-		UI_Node_DrawTooltip(hoveredNode, mousePosX, mousePosY);
+		int uiMousePosX, uiMousePosY;
+		UI_CursorToUISpace(mousePosX, mousePosY, &uiMousePosX, &uiMousePosY);
+		UI_Node_DrawTooltip(hoveredNode, uiMousePosX, uiMousePosY);
 	}
 
 #ifdef DEBUG
@@ -398,7 +400,9 @@ void UI_Draw (void)
 
 void UI_DrawCursor (void)
 {
-	UI_DrawDragAndDrop(mousePosX, mousePosY);
+	int uiMousePosX, uiMousePosY;
+	UI_CursorToUISpace(mousePosX, mousePosY, &uiMousePosX, &uiMousePosY);
+	UI_DrawDragAndDrop(uiMousePosX, uiMousePosY);
 }
 
 /**
