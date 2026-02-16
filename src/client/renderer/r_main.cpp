@@ -57,6 +57,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define GL_MINOR_VERSION 0x821C
 #endif
 
+#include <string>
+
 rendererData_t refdef;
 
 rconfig_t r_config;
