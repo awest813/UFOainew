@@ -42,6 +42,21 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../../ports/system.h"
 #include "../client.h"
 
+#include <cctype>
+#include <string>
+
+#ifndef GL_NUM_EXTENSIONS
+#define GL_NUM_EXTENSIONS 0x821D
+#endif
+
+#ifndef GL_MAJOR_VERSION
+#define GL_MAJOR_VERSION 0x821B
+#endif
+
+#ifndef GL_MINOR_VERSION
+#define GL_MINOR_VERSION 0x821C
+#endif
+
 #include <string>
 
 rendererData_t refdef;
@@ -822,6 +837,58 @@ static uintptr_t R_GetProcAddressExt (const char* functionName)
 	return 0;
 }
 
+static inline bool R_HasExtensionName (const char* extensionList, const char* extension)
+{
+	if (extensionList == nullptr || extension == nullptr || *extension == '\0')
+		return false;
+
+	const size_t extensionLength = strlen(extension);
+	const char* cursor = extensionList;
+	while ((cursor = strstr(cursor, extension)) != nullptr) {
+		const bool startsAtBoundary = cursor == extensionList || isspace((unsigned char)*(cursor - 1));
+		const bool endsAtBoundary = cursor[extensionLength] == '\0' || isspace((unsigned char)cursor[extensionLength]);
+		if (startsAtBoundary && endsAtBoundary)
+			return true;
+
+		cursor += extensionLength;
+	}
+
+	return false;
+}
+
+static void R_DetectGLVersion (void)
+{
+	r_config.glVersionMajor = 0;
+	r_config.glVersionMinor = 0;
+
+#ifndef GL_VERSION_ES_CM_1_0
+	GLint major = 0;
+	GLint minor = 0;
+	glGetIntegerv(GL_MAJOR_VERSION, &major);
+	if (glGetError() == GL_NO_ERROR && major > 0) {
+		glGetIntegerv(GL_MINOR_VERSION, &minor);
+		if (glGetError() == GL_NO_ERROR && minor >= 0) {
+			r_config.glVersionMajor = major;
+			r_config.glVersionMinor = minor;
+			return;
+		}
+	}
+#endif
+
+	if (r_config.versionString == nullptr)
+		return;
+
+	if (sscanf(r_config.versionString, "%d.%d", &r_config.glVersionMajor, &r_config.glVersionMinor) == 2)
+		return;
+
+	const char* versionNumbers = r_config.versionString;
+	while (*versionNumbers && strchr("0123456789", *versionNumbers) == nullptr)
+		versionNumbers++;
+
+	if (*versionNumbers)
+		sscanf(versionNumbers, "%d.%d", &r_config.glVersionMajor, &r_config.glVersionMinor);
+}
+
 /**
  * @brief Checks for an OpenGL extension that was announced via the OpenGL ext string. If the given extension string
  * includes a placeholder (###), several types are checked. Those from the ARB, those that official extensions (EXT),
@@ -840,7 +907,7 @@ static inline bool R_CheckExtension (const char* extension)
 #endif
 	const char* s = strstr(extension, "###");
 	if (s == nullptr) {
-		found = strstr(r_config.extensionsString, extension) != nullptr;
+		found = R_HasExtensionName(r_config.extensionsString, extension);
 	} else {
 		const char* replace[] = {"ARB", "EXT", "OES"};
 		char targetBuf[128];
@@ -849,7 +916,7 @@ static inline bool R_CheckExtension (const char* extension)
 		size_t i;
 		for (i = 0; i < replaceNo; i++) {
 			if (Q_strreplace(extension, "###", replace[i], targetBuf, length)) {
-				if (strstr(r_config.extensionsString, targetBuf) != nullptr) {
+				if (R_HasExtensionName(r_config.extensionsString, targetBuf)) {
 					found = true;
 					break;
 				}
@@ -886,15 +953,8 @@ static void R_InitExtensions (void)
 	GLenum err;
 	int tmpInteger;
 
-	/* Get OpenGL version.*/
-	if(sscanf(r_config.versionString, "%d.%d", &r_config.glVersionMajor, &r_config.glVersionMinor) != 2) {
-		const char*  versionNumbers = r_config.versionString; /* GLES reports version as "OpenGL ES 1.1", so we must skip non-numeric symbols first */
-		while(*versionNumbers && strchr("0123456789", *versionNumbers) == nullptr) {
-			versionNumbers ++;
-		}
-		if( *versionNumbers )
-			sscanf(versionNumbers, "%d.%d", &r_config.glVersionMajor, &r_config.glVersionMinor);
-	}
+	/* Get OpenGL version. */
+	R_DetectGLVersion();
 	Com_Printf("OpenGL version detected: %d.%d\n", r_config.glVersionMajor, r_config.glVersionMinor);
 
 	/* multitexture */
@@ -969,7 +1029,7 @@ static void R_InitExtensions (void)
 	if (R_CheckExtension("GL_ARB_texture_compression")) {
 		if (r_ext_texture_compression->integer) {
 			Com_Printf("using GL_ARB_texture_compression\n");
-			if (r_ext_s3tc_compression->integer && strstr(r_config.extensionsString, "GL_EXT_texture_compression_s3tc")) {
+			if (r_ext_s3tc_compression->integer && R_HasExtensionName(r_config.extensionsString, "GL_EXT_texture_compression_s3tc")) {
 				r_config.gl_compressed_solid_format = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
 				r_config.gl_compressed_alpha_format = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
 			} else {
