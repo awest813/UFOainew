@@ -70,7 +70,7 @@ sequence tut_introduction
 
 	obj2d intro_battlescape_txt
 	{
-		text		"_The battlescape is a turn-based view used to battle against opponents during campaigns, or skirmish, or multiplayer games."
+		text		"_The battlescape is the turn-based combat view used in campaign, skirmish, and multiplayer missions. Keep your soldiers in cover, reserve Time Units for reaction fire, and use crouch or kneel when you need extra accuracy and protection."
 		font		"f_normal"
 		pos			"0 15"
 		align		ul
@@ -90,7 +90,7 @@ sequence tut_introduction
 
 	obj2d intro_geoscape_txt
 	{
-		text		"_The geoscape is a real-time view used to follow the scenario that unfolds during campaigns."
+		text		"_The geoscape is the real-time campaign view. Use it to track UFO activity, launch interceptions quickly, and pause often so you can queue base, research, and production decisions without losing time."
 		font		"f_normal"
 		pos			"0 15"
 		align		ul
@@ -111,7 +111,7 @@ sequence tut_introduction
 	// Campaign mode
 	obj2d intro_campaign_txt
 	{
-		text		"_During campaigns, you have to manage bases, aircraft, soldiers, scientists, and engineers. You will need money to win: monitor statistics, and funding carefully."
+		text		"_During campaigns, you must manage bases, aircraft, soldiers, scientists, and engineers. To stay funded, expand radar coverage early, complete missions consistently, and keep an eye on monthly statistics and nation satisfaction."
 		font		"f_normal"
 		pos			"0 15"
 		align		ul
