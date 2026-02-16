@@ -42,6 +42,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../../ports/system.h"
 #include "../client.h"
 
+#include <string>
+
 rendererData_t refdef;
 
 rconfig_t r_config;
@@ -55,6 +57,7 @@ image_t* r_dummyTexture; /* 1x1 pixel white texture to be used when texturing is
 Weather r_battlescapeWeather;
 
 static cvar_t* r_maxtexres;
+static char* r_extensionsStringStorage;
 
 cvar_t* r_weather;
 cvar_t* r_drawentities;
@@ -111,6 +114,9 @@ cvar_t* r_drawtags;
 
 static void R_PrintInfo (const char* pre, const char* msg)
 {
+	if (msg == nullptr)
+		msg = "<not available>";
+
 	char buf[4096];
 	const size_t length = sizeof(buf);
 	const size_t maxLength = strlen(msg);
@@ -121,6 +127,50 @@ static void R_PrintInfo (const char* pre, const char* msg)
 		Com_Printf("%s", buf);
 	}
 	Com_Printf("\n");
+}
+
+static void R_RefreshExtensionsString (void)
+{
+	const char* extString = (const char*)glGetString(GL_EXTENSIONS);
+	if (extString != nullptr) {
+		r_config.extensionsString = extString;
+		return;
+	}
+
+	typedef const GLubyte* (APIENTRY* GetStringi_t)(GLenum name, GLuint index);
+	const GetStringi_t glGetStringiProc = (GetStringi_t)SDL_GL_GetProcAddress("glGetStringi");
+	if (glGetStringiProc == nullptr) {
+		r_config.extensionsString = "";
+		Com_Printf("GL_EXTENSIONS string unavailable and glGetStringi not found.\n");
+		return;
+	}
+
+	GLint extensionCount = 0;
+	glGetIntegerv(GL_NUM_EXTENSIONS, &extensionCount);
+	if (extensionCount <= 0) {
+		r_config.extensionsString = "";
+		Com_Printf("GL_NUM_EXTENSIONS returned %d\n", extensionCount);
+		return;
+	}
+
+	std::string extensionList;
+	for (GLint i = 0; i < extensionCount; i++) {
+		const char* extension = (const char*)glGetStringiProc(GL_EXTENSIONS, i);
+		if (extension == nullptr || *extension == '\0')
+			continue;
+
+		if (!extensionList.empty())
+			extensionList += ' ';
+		extensionList += extension;
+	}
+
+	if (r_extensionsStringStorage != nullptr) {
+		Mem_Free(r_extensionsStringStorage);
+		r_extensionsStringStorage = nullptr;
+	}
+	r_extensionsStringStorage = Mem_StrDup(extensionList.c_str());
+	r_config.extensionsString = r_extensionsStringStorage;
+	Com_Printf("Using glGetStringi fallback for extension discovery (%d extensions).\n", extensionCount);
 }
 
 /**
@@ -1279,7 +1329,7 @@ bool R_Init (void)
 	r_config.vendorString = (const char*)glGetString(GL_VENDOR);
 	r_config.rendererString = (const char*)glGetString(GL_RENDERER);
 	r_config.versionString = (const char*)glGetString(GL_VERSION);
-	r_config.extensionsString = (const char*)glGetString(GL_EXTENSIONS);
+	R_RefreshExtensionsString();
 	R_Strings_f();
 
 	/* sanity checks and card specific hacks */
@@ -1327,4 +1377,9 @@ void R_Shutdown (void)
 
 	/* shut down OS specific OpenGL stuff like contexts, etc. */
 	Rimp_Shutdown();
+
+	if (r_extensionsStringStorage != nullptr) {
+		Mem_Free(r_extensionsStringStorage);
+		r_extensionsStringStorage = nullptr;
+	}
 }
