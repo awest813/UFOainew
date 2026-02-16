@@ -1,0 +1,79 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux (Ninja)
+            os: ubuntu-latest
+            configure: >-
+              cmake -S . -B build/ci -G Ninja
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo
+              -DDISABLE_UFO=ON
+              -DDISABLE_TESTS=ON
+              -DDISABLE_TOOLS=ON
+              -DDISABLE_UFORADIANT=ON
+              -DDISABLE_I18N=ON
+              -DDISABLE_MANUAL=ON
+              -DDISABLE_DOXYGEN_DOCS=ON
+              -DDISABLE_BASE_PACKAGES=ON
+              -DDISABLE_MAPS_COMPILE=ON
+            build: cmake --build build/ci --parallel
+
+          - name: Windows (MSVC)
+            os: windows-latest
+            configure: >-
+              cmake -S . -B build/ci -G "Visual Studio 17 2022" -A x64
+              -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+              -DVCPKG_TARGET_TRIPLET=x64-windows
+              -DDISABLE_UFO=ON
+              -DDISABLE_TESTS=ON
+              -DDISABLE_TOOLS=ON
+              -DDISABLE_UFORADIANT=ON
+              -DDISABLE_I18N=ON
+              -DDISABLE_MANUAL=ON
+              -DDISABLE_DOXYGEN_DOCS=ON
+              -DDISABLE_BASE_PACKAGES=ON
+              -DDISABLE_MAPS_COMPILE=ON
+            build: cmake --build build/ci --config RelWithDebInfo --parallel
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkg-config \
+            libsdl2-dev libcurl4-openssl-dev zlib1g-dev liblua5.3-dev
+
+      - name: Setup vcpkg
+        if: runner.os == 'Windows'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 4ec70677c9584a07e68ec09af29d8d6f31deb557
+
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install sdl2 curl zlib lua --triplet x64-windows
+
+      - name: Configure
+        shell: pwsh
+        run: ${{ matrix.configure }}
+
+      - name: Build
+        shell: pwsh
+        run: ${{ matrix.build }}
