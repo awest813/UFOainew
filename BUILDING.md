@@ -13,12 +13,10 @@ make -j$(nproc)
 
 Useful configure flags:
 
-- Debug builds are the default (`./configure` prints `Debug build`).
+- Debug builds are the default (`./configure` prints `Debug build`; there is no `--enable-debug` flag).
 - `--enable-release`
 - `--enable-ccache`
 - `--prefix=/custom/prefix`
-
-Note: there is no `--enable-debug` flag in this repository's configure script.
 
 To inspect options:
 
