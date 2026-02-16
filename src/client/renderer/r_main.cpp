@@ -57,8 +57,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define GL_MINOR_VERSION 0x821C
 #endif
 
-#include <string>
-
 rendererData_t refdef;
 
 rconfig_t r_config;
@@ -856,37 +854,47 @@ static inline bool R_HasExtensionName (const char* extensionList, const char* ex
 	return false;
 }
 
+static bool R_ParseGLVersionString (const char* versionString, int* major, int* minor)
+{
+	if (versionString == nullptr)
+		return false;
+
+	if (sscanf(versionString, "%d.%d", major, minor) == 2)
+		return true;
+
+	const char* versionNumbers = versionString;
+	while (*versionNumbers && strchr("0123456789", *versionNumbers) == nullptr)
+		versionNumbers++;
+
+	return *versionNumbers && sscanf(versionNumbers, "%d.%d", major, minor) == 2;
+}
+
 static void R_DetectGLVersion (void)
 {
 	r_config.glVersionMajor = 0;
 	r_config.glVersionMinor = 0;
 
+	int parsedMajor = 0;
+	int parsedMinor = 0;
+	if (R_ParseGLVersionString(r_config.versionString, &parsedMajor, &parsedMinor)) {
+		r_config.glVersionMajor = parsedMajor;
+		r_config.glVersionMinor = parsedMinor;
+	}
+
 #ifndef GL_VERSION_ES_CM_1_0
-	GLint major = 0;
-	GLint minor = 0;
-	glGetIntegerv(GL_MAJOR_VERSION, &major);
-	if (glGetError() == GL_NO_ERROR && major > 0) {
-		glGetIntegerv(GL_MINOR_VERSION, &minor);
-		if (glGetError() == GL_NO_ERROR && minor >= 0) {
-			r_config.glVersionMajor = major;
-			r_config.glVersionMinor = minor;
-			return;
+	if (r_config.glVersionMajor >= 3) {
+		GLint major = 0;
+		GLint minor = 0;
+		glGetIntegerv(GL_MAJOR_VERSION, &major);
+		if (glGetError() == GL_NO_ERROR && major > 0) {
+			glGetIntegerv(GL_MINOR_VERSION, &minor);
+			if (glGetError() == GL_NO_ERROR && minor >= 0) {
+				r_config.glVersionMajor = major;
+				r_config.glVersionMinor = minor;
+			}
 		}
 	}
 #endif
-
-	if (r_config.versionString == nullptr)
-		return;
-
-	if (sscanf(r_config.versionString, "%d.%d", &r_config.glVersionMajor, &r_config.glVersionMinor) == 2)
-		return;
-
-	const char* versionNumbers = r_config.versionString;
-	while (*versionNumbers && strchr("0123456789", *versionNumbers) == nullptr)
-		versionNumbers++;
-
-	if (*versionNumbers)
-		sscanf(versionNumbers, "%d.%d", &r_config.glVersionMajor, &r_config.glVersionMinor);
 }
 
 /**
